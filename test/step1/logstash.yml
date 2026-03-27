@@ -1,0 +1,206 @@
+apiVersion: logstash.k8s.elastic.co/v1alpha1
+kind: Logstash 
+metadata:
+  name: quickstart
+  namespace: default
+spec:
+  version: 8.19.2
+  count: 3
+
+  elasticsearchRefs:
+    - name: quickstart
+      namespace: default
+      clusterName: es-default   
+
+  services:
+    - name: beats
+      service:
+        spec:
+          type: ClusterIP
+          ports:
+            - port: 5044
+              name: "filebeat"
+              protocol: TCP
+
+  config:
+    log.level: info
+    path.config: /usr/share/logstash/pipeline
+    #path.config: /usr/share/logstash/pipeline
+    queue.type: persisted # Enable persistent queue to handle backpressure
+    # queue.type: memory
+    queue.max_bytes: 4gb # Increase queue size for high throughput
+    pipeline.batch.size: 125 # Default batch size for Elasticsearch output
+    pipeline.batch.delay: 50 # Delay in ms for batching
+
+  pipelines:
+    - pipeline.id: main
+      pipeline.workers: 4
+      config.string: |
+        input {
+          generator {
+            message => "Hello world!"
+            count => 0
+            threads => 10000
+          }
+          beats {
+            port => 5044
+          }
+        }
+        output {
+          elasticsearch {
+            hosts => ["https://quickstart-es-http.default.svc:9200"]
+            index => "logstash-%{+YYYY.MM.dd}"
+            user => "elastic"
+            password => "${ES_PASSWORD}"
+            ssl => true
+            cacert => "/usr/share/logstash/config/certs/ca.crt"
+          }
+        }
+
+  podTemplate:
+    metadata:
+      labels:
+        app: logstash
+      annotations:
+        prometheus.io/scrape: "true" # Enable Prometheus scraping
+        prometheus.io/port: "9600" # Logstash monitoring port
+    spec:
+      containers:
+        - name: logstash
+          resources:
+            requests:
+              cpu: "1" # 2 CPU cores for stress testing
+              memory: "4Gi" # 4GB memory
+            limits:
+              cpu: "2" # Allow up to 4 CPU cores
+              memory: "8Gi" # Allow up to 8GB memory
+          env:
+            - name: JAVA_OPTS
+              value: "-Xms2g -Xmx4g" # JVM heap settings for high throughput
+
+          
+      #       - name: ES_PASSWORD
+      #         valueFrom:
+      #           secretKeyRef:
+      #             name: quickstart-es-elastic-user
+      #             key: elastic
+      #     volumeMounts:
+      #       - name: elasticsearch-certs
+      #         mountPath: /usr/share/logstash/config/certs
+      #         readOnly: true
+      # volumes:
+      #   - name: elasticsearch-certs
+      #     secret:
+      #       secretName: quickstart-ls-logstash-es-default-quickstart-ca
+  
+
+
+  # podTemplate:
+  #   spec:
+  #     containers:
+  #       - name: logstash
+  #         env:
+  #           - name: ES_PASSWORD
+  #             valueFrom:
+  #               secretKeyRef:
+  #                 name: quickstart-es-elastic-user
+  #                 key: elastic
+  #         volumeMounts:
+  #           - name: elasticsearch-certs
+  #             mountPath: /usr/share/logstash/config/certs
+  #             readOnly: true
+  #           - name: pipeline-files
+  #             mountPath: /usr/share/logstash/pipeline
+  #     volumes:
+  #       - name: elasticsearch-certs
+  #         secret:
+  #           secretName: quickstart-ls-logstash-es-default-quickstart-ca
+  #       - name: pipeline-files
+  #         configMap:
+  #           name: logstash-pipeline-files
+# apiVersion: logstash.k8s.elastic.co/v1alpha1
+# kind: Logstash
+# metadata:
+#   name: quickstart-ls
+#   namespace: default
+# spec:
+#   version: 8.16.1
+#   count: 1
+
+#   elasticsearchRefs:
+#     - name: quickstart
+#       namespace: default
+#       clusterName: es-default
+
+#   services:
+#     - name: beats
+#       service:
+#         spec:
+#           type: ClusterIP
+#           ports:
+#             - port: 5044
+#               name: "filebeat"
+#               protocol: TCP
+
+#   podTemplate:
+#     spec:
+#       containers:
+#         - name: logstash
+#           env:
+#             - name: ES_PASSWORD
+#               valueFrom:
+#                 secretKeyRef:
+#                   name: quickstart-es-elastic-user
+#                   key: elastic
+#           volumeMounts:
+#             - name: elasticsearch-certs
+#               mountPath: /usr/share/logstash/config/certs
+#               readOnly: true
+#             - name: pipeline-files
+#               mountPath: /usr/share/logstash/pipeline
+#       volumes:
+#         - name: elasticsearch-certs
+#           secret:
+#             secretName: quickstart-ls-logstash-es-default-quickstart-ca
+#         - name: pipeline-files
+#           configMap:
+#             name: logstash-pipeline-files
+
+#   config:
+#     log.level: info
+#     path.config: /usr/share/logstash/pipeline
+#   pipelines:
+#     - pipeline.id: main
+#       pipeline.workers: 4
+#       config.string: |
+#         input {
+#           generator {
+#             message => "Hello world!"
+#             count => 0
+#             threads => 10000
+#           }
+#           beats {
+#             port => 5044
+#           }
+#         }
+#         output {
+#           elasticsearch {
+#             hosts => ["https://quickstart-es-http.default.svc:9200"]
+#             index => "logstash-%{+YYYY.MM.dd}"
+#             user => "elastic"
+#             password => "${ES_PASSWORD}"
+#             ssl => true
+#             cacert => "/usr/share/logstash/config/certs/ca.crt"
+#           }
+#         }                                                                          1,11          Top
+
+# output {
+#           elasticsearch {
+#             hosts => ["https://quickstart-es-http.default.svc:9200"]
+#             index => "logstash-%{+YYYY.MM.dd}"
+#             user => "elastic"
+#             password => "${ES_PASSWORD}"
+#             ssl => true
+#             cacert => "/usr/share/logstash/config/certs/ca.crt"
+#           }
+#         }

@@ -1,0 +1,83 @@
+apiVersion: logstash.k8s.elastic.co/v1alpha1
+kind: Logstash 
+metadata:
+  name: quickstart
+  namespace: default
+spec:
+  version: 8.19.2
+  count: 3
+
+  elasticsearchRefs:
+    - name: quickstart
+      namespace: default
+      clusterName: es-default   
+
+  services:
+    - name: beats
+      service:
+        spec:
+          type: ClusterIP
+          ports:
+            - port: 5044
+              name: "filebeat"
+              protocol: TCP
+
+  config:
+    log.level: info
+    path.config: /usr/share/logstash/pipeline
+    #path.config: /usr/share/logstash/pipeline
+    queue.type: persisted # Enable persistent queue to handle backpressure
+    # queue.type: memory
+    queue.max_bytes: 4gb # Increase queue size for high throughput
+    pipeline.batch.size: 50 # Default batch size for Elasticsearch output
+    pipeline.batch.delay: 100 # Delay in ms for batching
+
+  pipelines:
+    - pipeline.id: main
+      pipeline.workers: 4
+      config.string: |
+        input {
+          generator {
+            message => "Hello world!"
+            count => 0
+            threads => 1000
+          }
+          generator {
+            message => "Hello world!"
+            count => 0
+            threads => 1000
+          }
+          beats {
+            port => 5044
+          }
+        }
+        output {
+          elasticsearch {
+            hosts => ["${QS_ES_HOSTS}"]
+            index => "logstash-%{+YYYY.MM.dd}"
+            user => "${QS_ES_USER}"
+            password => "${QS_ES_PASSWORD}"
+            cacert => "${QS_ES_SSL_CERTIFICATE_AUTHORITY}"
+          }
+        }
+
+  podTemplate:
+    metadata:
+      labels:
+        app: logstash
+      annotations:
+        prometheus.io/scrape: "true" # Enable Prometheus scraping
+        prometheus.io/port: "9600" # Logstash monitoring port
+    spec:
+      containers:
+        - name: logstash
+          resources:
+            requests:
+              cpu: "1" # 2 CPU cores for stress testing
+              memory: "4Gi" # 4GB memory
+            limits:
+              cpu: "2" # Allow up to 4 CPU cores
+              memory: "8Gi" # Allow up to 8GB memory
+          env:
+            - name: JAVA_OPTS
+              value: "-Xms2g -Xmx4g" # JVM heap settings for high throughput

@@ -1,0 +1,165 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-master-0
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard
+  storageClassName: ""
+  hostPath:
+    path: /home/ubuntu/pv-master
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - k3s-master # change here   ✅正確的 master node hostname
+  claimRef:
+    name: elasticsearch-data-quickstart-es-master-node-0
+    namespace: default
+  
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-master-1
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard
+  storageClassName: ""
+  hostPath:
+    path: /home/ubuntu/pv-master
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - vm0
+          # change here   ✅正確的 master node hostname
+  claimRef:
+    name: elasticsearch-data-quickstart-es-master-node-1
+    namespace: default
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-master-2
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard
+  storageClassName: ""
+  hostPath:
+    path: /home/ubuntu/pv-master
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - vm1 # change here   ✅正確的 master node hostname
+  claimRef:
+    name: elasticsearch-data-quickstart-es-master-node-2
+    namespace: default
+
+#=====================================================
+#  PVs for Worker node
+#  PersistentVolume for Elasticsearch Data Node
+#=====================================================
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-quickstart-data-0
+spec:
+  capacity:
+    storage: 1000Gi
+  accessModes:
+  - ReadWriteOnce 
+  storageClassName: standard
+  storageClassName: ""
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  local:
+    path: /home/ubuntu/pv-data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:               
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - k3s-master # change here   ✅正確的 data node hostname
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-quickstart-data-1
+spec:
+  capacity:
+    storage: 1000Gi
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard
+  storageClassName: ""
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  local:
+    path: /home/ubuntu/pv-data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:               
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - vm0 # change here   ✅正確的 data node hostname
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-quickstart-data-2
+spec:
+  capacity:
+    storage: 1000Gi
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard
+  storageClassName: ""
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  local:
+    path: /home/ubuntu/pv-data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:               
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - vm1 # change here   ✅正確的 data node hostname

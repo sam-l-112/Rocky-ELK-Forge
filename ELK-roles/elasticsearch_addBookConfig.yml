@@ -1,0 +1,128 @@
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: quickstart
+spec:
+  version: 8.19.2
+  nodeSets:
+  - name: master-node
+    count: 3
+    config:
+      node.roles: ["master"]
+      node.store.allow_mmap: false
+      # 記憶體鎖定暫時關閉
+      bootstrap.memory_lock: false
+      # 資源分配與分散策略
+      node.attr.rack_id: ${NODE_RACK_ID}
+      cluster.routing.allocation.awareness.attributes: rack_id
+      xpack.ml.enabled: false
+      xpack.security.enabled: true  
+      xpack.license.self_generated.type: basic
+      transport.compress: false
+
+      indices.memory.index_buffer_size: 400mb 
+
+      #index只能在index template中設定
+      #index.translog.interval: 30s 
+      #index.translog.flush_threshold_size: 128mb
+
+    podTemplate:
+      spec:
+        containers:
+        - name: elasticsearch
+          # 1. 設定 K8s 資源，Operator 會據此設定 -Xms/-Xmx 為 2g
+          resources:
+            requests:   #最少資源
+              cpu: 500m
+              memory: 4Gi
+            limits:     #最多資源
+              cpu: 2
+              memory: 4Gi
+          # 2. 設定 ES_JAVA_OPTS 來加入其他 JVM 參數
+          env:
+          - name: NODE_RACK_ID
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: ES_JAVA_OPTS
+            value: >
+              -Xms3g
+              -Xmx3g
+              -Xshare:auto
+              -Djava.locale.providers=SPI,COMPAT
+              -XX:G1ReservePercent=25
+              -XX:InitiatingHeapOccupancyPercent=30
+              -XX:MaxDirectMemorySize=2147483648
+              -XX:G1HeapRegionSize=4m
+              
+    volumeClaimTemplates:
+    - metadata:
+        name: elasticsearch-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: ""   #與下方 PV 一致（空字串）
+  - name: data-nodes
+    count: 3
+    config:
+      node.roles: ["data","ingest","ml"]
+      node.store.allow_mmap: false
+      # 記憶體鎖定暫時關閉
+      bootstrap.memory_lock: false
+      # 資源分配與分散策略
+      node.attr.rack_id: ${NODE_RACK_ID}
+      cluster.routing.allocation.awareness.attributes: rack_id
+      xpack.ml.enabled: true
+      xpack.security.enabled: true  
+      xpack.license.self_generated.type: basic
+      transport.compress: false
+
+      indices.memory.index_buffer_size: 400mb 
+
+      #index只能在index template中設定
+      #index.translog.interval: 30s 
+      #index.translog.flush_threshold_size: 128mb
+
+    podTemplate:
+      spec:
+        containers:
+        - name: elasticsearch
+          # 1. 設定 K8s 資源，Operator 會據此設定 -Xms/-Xmx 為 2g
+          resources:
+            requests:   #最少資源
+              cpu: 500m
+              memory: 6Gi
+            limits:     #最多資源
+              cpu: 2
+              memory: 6Gi
+          # 2. 設定 ES_JAVA_OPTS 來加入其他 JVM 參數
+          env:
+          - name: NODE_RACK_ID
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: ES_JAVA_OPTS
+            value: >
+              -Xms3g
+              -Xmx3g
+              -Djava.locale.providers=SPI,COMPAT
+              -XX:G1ReservePercent=25
+              -XX:InitiatingHeapOccupancyPercent=30
+              -XX:MaxDirectMemorySize=2147483648
+              -XX:+HeapDumpOnOutOfMemoryError
+              -XX:HeapDumpPath=data
+              -XX:ErrorFile=logs/hs_err_pid%p.log
+              -Xlog:gc*,gc+age=trace,safepoint:file=logs/gc.log:utctime,pid,tags:filecount=32,filesize=64m
+              -XX:G1HeapRegionSize=4m
+              
+    volumeClaimTemplates:
+    - metadata:
+        name: elasticsearch-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1000Gi
+        storageClassName: ""   #與下方 PV 一致（空字串）

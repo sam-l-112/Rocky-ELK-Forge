@@ -1,0 +1,74 @@
+apiVersion: logstash.k8s.elastic.co/v1alpha1
+kind: Logstash
+metadata:
+  name: quickstart
+spec:
+  count: 3
+  version: 8.19.2
+  elasticsearchRefs:
+    - name: quickstart
+      clusterName: qs   # 自訂別名，用來生成 QS_ES_* 環境變數
+  # 相當於 logstash.yml：調高並行度與批次
+  config:
+    pipeline.workers: 8           # 每個 pipeline 的 filter+output worker 數
+    pipeline.batch.size: 2048     # 每個 worker 的批次大小（越大吞吐越高/延遲略增）
+    pipeline.batch.delay: 1       # 批次等待最大毫秒數
+    queue.type: memory            # 為純壓測取 throughput；避免 PQ 帶來 I/O 開銷
+    log.level: info               # 需要時改 debug
+
+  pipelines:
+    - pipeline.id: main
+      config.string: |
+        input {                    #使用logstash自帶的壓力測試發送kibana
+          generator {
+            id => "gen-1"
+            message => "Hello world!"
+            count => 0
+            threads => 1000
+          }
+          generator {
+            id => "gen-2"
+            message => "Hello world!"
+            count => 0
+            threads => 1000
+          }
+        }
+        filter {
+          # 做點輕量處理讓 CPU 不完全閒著
+          mutate { add_field => { "source" => "ls-stress" } }
+        }
+        output {
+          elasticsearch {
+            hosts => [ "${QS_ES_HOSTS}" ]
+            user => "${QS_ES_USER}"
+            password => "${QS_ES_PASSWORD}"
+            ssl_certificate_authorities => "${QS_ES_SSL_CERTIFICATE_AUTHORITY}"
+          }
+        }
+
+  # 調高 JVM heap 與 Pod 資源，避免被 cgroup 限制
+  podTemplate:
+    spec:
+      containers:
+      - name: logstash
+        env:
+        - name: LS_JAVA_OPTS
+          value: "-Xms2g -Xmx2g"   # 依節點記憶體再往上拉
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "3Gi"
+          limits:
+            cpu: "2000m"
+            memory: "6Gi"
+
+  services:
+    - name: beats
+      service:
+        spec:
+          type: NodePort
+          ports:
+            - name: filebeat
+              port: 5044
+              targetPort: 5044
+              protocol: TCP

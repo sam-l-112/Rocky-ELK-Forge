@@ -1,0 +1,99 @@
+apiVersion: logstash.k8s.elastic.co/v1alpha1
+kind: Logstash
+metadata:
+  name: quickstart
+spec:
+  version: 8.19.2  # 如果可用，考慮升級到最新版如 8.15+，但保持原版
+  count: 3
+
+  elasticsearchRefs:
+    - name: quickstart
+      clusterName: qs
+
+  services:
+    - name: beats
+      service:
+        spec:
+          type: ClusterIP
+          ports:
+            - port: 5044
+              name: "filebeat"
+              protocol: TCP
+
+  config:
+    log.level: info
+    queue.type: persisted  # 保持，處理 backpressure
+    queue.max_bytes: 8gb  # 增大到 8GB，給高壓更多緩衝空間
+    queue.drain: true  # 啟用 drain，避免 shutdown 時丟失資料
+    pipeline.batch.size: 250  # 增大到 250，提升 throughput，減少頻繁輸出
+    pipeline.batch.delay: 50  # 減到 50ms，平衡 batching 效率
+
+  pipelines:
+    - pipeline.id: main
+      pipeline.workers: 2  # 減到 2，匹配 CPU limits (2)，避免 contention
+      config.string: |
+        input {
+          # 移除或調整 generator：假設高壓用 beats，註解掉；若測試用，設合理 threads/count
+          # generator {
+          #   message => "Hello world!"
+          #   count => 1000000  # 若測試高壓，設大 count 但 threads 減低
+          #   threads => 4  # 減到 4，避免 thread explosion
+          # }
+          beats {
+            port => 5044
+          }
+        }
+        output {
+          elasticsearch {
+            hosts => ["${QS_ES_HOSTS}"]
+            index => "logstash-%{+YYYY.MM.dd}"
+            user => "${QS_ES_USER}"
+            password => "${QS_ES_PASSWORD}"
+            cacert => "${QS_ES_SSL_CERTIFICATE_AUTHORITY}"
+          }
+        }
+        
+  podTemplate:
+    metadata:
+      labels:
+        app: logstash
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9600"
+    spec:
+      affinity:  # 加 podAntiAffinity，避免 Pod 集中在同一 node，高壓時分散負載
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - logstash
+                topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: logstash
+          resources:
+            requests:
+              cpu: "2"  # 增大 requests 到 2，確保 baseline CPU
+              memory: "6Gi"  # 增大到 6Gi，匹配 heap + off-heap
+            limits:
+              cpu: "4"  # 增大 limits 到 4，允許 burst for 高壓
+              memory: "10Gi"  # 增大到 10Gi，給 queue/off-heap 更多空間
+          env:
+            - name: JAVA_OPTS
+              value: "-Xms3g -Xmx6g"  # 增大 heap 到 3-6g，匹配 memory，減少 GC
+          livenessProbe:  # 加 liveness probe，避免 hang
+            httpGet:
+              path: /
+              port: 9600  # Logstash API port
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:  # 加 readiness，确保 Pod ready 才接收流量
+            httpGet:
+              path: /
+              port: 9600
+            initialDelaySeconds: 60
+            periodSeconds: 10

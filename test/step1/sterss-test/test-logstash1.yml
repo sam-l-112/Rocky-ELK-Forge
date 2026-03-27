@@ -1,0 +1,75 @@
+apiVersion: logstash.k8s.elastic.co/v1alpha1
+kind: Logstash
+metadata:
+  name: quickstart
+spec:
+  version: 8.19.2
+  count: 3
+
+  elasticsearchRefs:
+    - name: quickstart
+      clusterName: qs
+
+  services:
+    - name: beats
+      service:
+        spec:
+          type: ClusterIP
+          ports:
+            - port: 5044
+              name: "filebeat"
+              protocol: TCP
+
+  config:
+    log.level: info
+    queue.type: memory         # 壓測時先用 memory queue 提升吞吐量
+    # queue.type: persisted    # 要測持久化效能時再打開
+    queue.max_bytes: 1gb       # 避免磁碟壓力太大
+    pipeline.batch.size: 50
+    pipeline.batch.delay: 50   # 延遲降低，提升即時性
+    pipeline.workers: 2        # 與 CPU core 數接近（限制上下文切換成本）
+
+  pipelines:
+    - pipeline.id: main
+      config.string: |
+        input {
+          generator {
+            message => "Hello world!"
+            count => 0
+            threads => 8        # 減少到合理範圍，避免爆 CPU
+          }
+          beats {
+            port => 5044
+          }
+        }
+        output {
+          elasticsearch {
+            hosts => ["${QS_ES_HOSTS}"]
+            index => "logstash-%{+YYYY.MM.dd}"
+            user => "${QS_ES_USER}"
+            password => "${QS_ES_PASSWORD}"
+            cacert => "${QS_ES_SSL_CERTIFICATE_AUTHORITY}"
+            action => "create"
+          }
+        }
+
+  podTemplate:
+    metadata:
+      labels:
+        app: logstash
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9600"
+    spec:
+      containers:
+        - name: logstash
+          resources:
+            requests:
+              cpu: "1"
+              memory: "4Gi"
+            limits:
+              cpu: "2"
+              memory: "6Gi"
+          env:
+            - name: JAVA_OPTS
+              value: "-Xms3g -Xmx4g"  # Heap 比原本多一點，減少 GC 壓力
