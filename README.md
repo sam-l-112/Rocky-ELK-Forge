@@ -53,7 +53,7 @@
 ### Step 1: 環境初始化
 確認網路連線並複製專案，腳本會優先檢查 OS 版本是否為 Rocky Linux。
 ```bash
-git clone [https://github.com/sam-l-112/Rocky-ELK-Forge.git](https://github.com/sam-l-112/Rocky-ELK-Forge.git)
+git clone https://github.com/sam-l-112/Rocky-ELK-Forge.git
 cd Rocky-ELK-Forge
 sudo chmod +x *.sh
 ```
